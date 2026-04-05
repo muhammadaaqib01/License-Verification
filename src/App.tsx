@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { useState, useRef } from 'react';
-import { Search, ShieldCheck, AlertCircle, User, CreditCard, Loader2, CheckCircle2, XCircle, Download, Printer, FileText, Image as ImageIcon } from 'lucide-react';
+import { Search, ShieldCheck, AlertCircle, User, CreditCard, Loader2, CheckCircle2, XCircle, Download, Printer, FileText, Image as ImageIcon, RefreshCw, Eye, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
 import { db, auth } from './firebase';
 
@@ -154,6 +154,43 @@ function LicenseApp() {
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
+  // Records List State
+  const [allLicenses, setAllLicenses] = useState<(License & { id: string })[]>([]);
+  const [fetchingRecords, setFetchingRecords] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+
+  const fetchAllLicenses = async () => {
+    if (!isStaticLoggedIn) return;
+    setFetchingRecords(true);
+    const path = 'licenses';
+    try {
+      const q = query(collection(db, path), orderBy('uploadedAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const records = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as (License & { id: string })[];
+      setAllLicenses(records);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, path);
+    } finally {
+      setFetchingRecords(false);
+    }
+  };
+
+  const handleDeleteLicense = async (id: string) => {
+    setDeleteLoading(id);
+    const path = `licenses/${id}`;
+    try {
+      await deleteDoc(doc(db, 'licenses', id));
+      setAllLicenses(prev => prev.filter(item => item.id !== id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     setFileError(null);
@@ -201,8 +238,9 @@ function LicenseApp() {
 
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (u && u.email === 'abc@gmail.com') {
+      if (u && (u.email === 'abc@gmail.com' || u.email === 'abc123@gmail.com' || u.email === 'm.aqibtech@gmail.com')) {
         setIsStaticLoggedIn(true);
+        fetchAllLicenses();
       } else {
         setIsStaticLoggedIn(false);
       }
@@ -259,6 +297,7 @@ function LicenseApp() {
         fileUrl: '',
         fileType: 'image'
       });
+      fetchAllLicenses();
       setTimeout(() => setUploadSuccess(false), 3000);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
@@ -472,6 +511,92 @@ function LicenseApp() {
                     </motion.p>
                   )}
                 </form>
+              </div>
+            </div>
+
+            {/* Records List Section */}
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold flex items-center space-x-2">
+                    <CreditCard className="w-6 h-6 text-punjab-green" />
+                    <span>All License Records</span>
+                  </h3>
+                  <button 
+                    onClick={fetchAllLicenses}
+                    disabled={fetchingRecords}
+                    className="p-2 text-gray-500 hover:text-punjab-green transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-5 h-5 ${fetchingRecords ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                {fetchingRecords && allLicenses.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-punjab-green mx-auto mb-4" />
+                    <p className="text-gray-500">Loading records...</p>
+                  </div>
+                ) : allLicenses.length === 0 ? (
+                  <div className="py-12 text-center border-2 border-dashed border-gray-100 rounded-xl">
+                    <AlertCircle className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-gray-500">No records found.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          <th className="pb-4 font-bold text-gray-700">License No.</th>
+                          <th className="pb-4 font-bold text-gray-700">CNIC</th>
+                          <th className="pb-4 font-bold text-gray-700">Type</th>
+                          <th className="pb-4 font-bold text-gray-700 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {allLicenses.map((license) => (
+                          <tr key={license.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="py-4 font-medium text-gray-900">{license.licenseNumber}</td>
+                            <td className="py-4 text-gray-600">{license.cnic}</td>
+                            <td className="py-4">
+                              <span className={`text-xs px-2 py-1 rounded-full font-bold uppercase ${
+                                license.fileType === 'pdf' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {license.fileType}
+                              </span>
+                            </td>
+                            <td className="py-4 text-right space-x-2">
+                              <button 
+                                onClick={() => {
+                                  setResult(license);
+                                  setView('public');
+                                  setTimeout(() => {
+                                    cardRef.current?.scrollIntoView({ behavior: 'smooth' });
+                                  }, 100);
+                                }}
+                                className="p-2 text-gray-400 hover:text-punjab-green transition-colors"
+                                title="View Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteLicense(license.id)}
+                                disabled={deleteLoading === license.id}
+                                className="p-2 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                                title="Delete Record"
+                              >
+                                {deleteLoading === license.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
