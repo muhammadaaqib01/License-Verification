@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "License": {
+      "title": "License",
+      "description": "A driving license record containing a file (PDF or Image) for verification.",
+      "type": "object",
+      "properties": {
+        "licenseNumber": {
+          "type": "string",
+          "description": "The unique license number (e.g., PL-123456)."
+        },
+        "cnic": {
+          "type": "string",
+          "description": "The CNIC number of the license holder (e.g., 35202-1234567-1)."
+        },
+        "fileUrl": {
+          "type": "string",
+          "description": "A URL to the uploaded PDF or image of the license."
+        },
+        "fileType": {
+          "type": "string",
+          "enum": ["image", "pdf"],
+          "description": "The type of the uploaded file."
+        },
+        "uploadedAt": {
+          "type": "string",
+          "description": "The timestamp when the license was uploaded."
+        }
+      },
+      "required": ["licenseNumber", "cnic", "fileUrl", "fileType"]
+    }
+  },
+  "firestore": {
+    "/licenses/{licenseId}": {
+      "schema": "License",
+      "description": "Collection of all driving licenses."
+    }
+  }
+}

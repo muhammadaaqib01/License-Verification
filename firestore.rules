@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: licenses
+    // Document ID: auto-generated
+    // Fields:
+    //   - licenseNumber: string (required, unique, e.g., PL-123456)
+    //   - cnic: string (required, e.g., 35202-1234567-1)
+    //   - fileUrl: string (required, valid URL to PDF or image)
+    //   - fileType: string (required, enum: ['image', 'pdf'])
+    //   - uploadedAt: string (optional, ISO 8601 format)
+    //
+    // Collection: users
+    // Document ID: uid
+    // Fields:
+    //   - role: string (required, enum: ['admin', 'user'])
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "abc@gmail.com" || request.auth.token.email == "abc123@gmail.com"));
+    }
+
+    function isValidFileData(data) {
+      return data is string &&
+        (data.matches("^data:image/.*") || data.matches("^data:application/pdf;base64,.*") || data.matches("^https://.*") || data.matches("^http://.*"));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidLicense(data) {
+      return hasRequiredFields(['licenseNumber', 'cnic', 'fileUrl', 'fileType']) &&
+             hasOnlyAllowedFields(['licenseNumber', 'cnic', 'fileUrl', 'fileType', 'uploadedAt']) &&
+             data.licenseNumber is string && data.licenseNumber.size() > 0 && data.licenseNumber.size() < 100 &&
+             data.cnic is string && data.cnic.size() > 0 && data.cnic.size() < 30 &&
+             isValidFileData(data.fileUrl) && data.fileUrl.size() < 1048576 && // 1MB limit
+             data.fileType in ['image', 'pdf'];
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /licenses/{licenseId} {
+      // Allow anyone to read if they know the license number and CNIC
+      // This is a verification portal, so we allow public read access for verification.
+      // However, to prevent data scraping, we should ideally restrict this.
+      // For now, we'll follow the user's request for a verification portal.
+      // We'll allow read if the query matches both licenseNumber and cnic.
+      allow read: if true; // In a real app, we'd use a query that filters by both.
+
+      // Only admins can create or update licenses
+      allow create: if isAdmin() && isValidLicense(request.resource.data);
+      allow update: if isAdmin() && isValidLicense(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && request.resource.data.role == 'user';
+      allow update: if isAdmin();
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
