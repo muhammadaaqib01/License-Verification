@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
 import { db, auth } from './firebase';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // ===============================================================
 // Types
@@ -815,6 +816,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <LicenseApp />
+      <SpeedInsights />
     </ErrorBoundary>
   );
 }
