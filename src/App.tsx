@@ -165,7 +165,7 @@ function LicenseApp() {
 
   const fetchAllLicenses = async () => {
     const user = auth.currentUser;
-    if (!user || !(user.email === 'abc@gmail.com' || user.email === 'abc123@gmail.com' || user.email === 'm.aqibtech@gmail.com' || user.email === 'aaqibraza86341@gmail.com')) return;
+    if (!user || !(user.email === 'abc@gmail.com' || user.email === 'abc123@gmail.com' || user.email === 'm.aqibtech@gmail.com' || user.email === 'aaqibraza86341@gmail.com' || user.email === 'work.aqibraza86341@gmail.com' || user.email === 'work.aqibraza@gmail.com')) return;
     setFetchingRecords(true);
     const path = 'licenses';
     try {
@@ -228,7 +228,7 @@ function LicenseApp() {
     setLoginErrorText('');
 
     const emailTrimmed = loginEmail.trim().toLowerCase();
-    const ALLOWED_ADMINS = ['abc@gmail.com', 'abc123@gmail.com', 'm.aqibtech@gmail.com', 'aaqibraza86341@gmail.com'];
+    const ALLOWED_ADMINS = ['abc@gmail.com', 'abc123@gmail.com', 'm.aqibtech@gmail.com', 'aaqibraza86341@gmail.com', 'work.aqibraza86341@gmail.com', 'work.aqibraza@gmail.com'];
     
     if (!ALLOWED_ADMINS.includes(emailTrimmed)) {
       setLoginErrorText('Only allowlisted admin email addresses are allowed.');
@@ -243,22 +243,30 @@ function LicenseApp() {
     }
 
     try {
-      if (isRegisterMode) {
-        await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
-        setLoginSuccessText('Admin account created successfully!');
-      } else {
-        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      }
+      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
       setIsStaticLoggedIn(true);
       setLoginError(false);
     } catch (error: any) {
       console.error('Auth Error:', error);
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-        setLoginErrorText('Invalid credentials. If you deleted your user from console, switch to the Register tab above to recreate it.');
-      } else if (error.code === 'auth/email-already-in-use') {
-        setLoginErrorText('Email is already registered. Please login instead.');
-      } else if (error.code === 'auth/weak-password') {
-        setLoginErrorText('Password must be at least 6 characters.');
+      // If the email is one of our special auto-create accounts and password matches the default,
+      // and login fails due to invalid/missing credentials, try to register them dynamically
+      if (
+        (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') &&
+        (emailTrimmed === 'work.aqibraza@gmail.com' || emailTrimmed === 'work.aqibraza86341@gmail.com') &&
+        loginPassword === 'Aqib123'
+      ) {
+        try {
+          await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
+          setIsStaticLoggedIn(true);
+          setLoginError(false);
+          return;
+        } catch (createError: any) {
+          console.error('Dynamic creation failed:', createError);
+        }
+      }
+
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+        setLoginErrorText('Invalid credentials. Please make sure your email and password are correct.');
       } else {
         setLoginErrorText(error.message || 'An error occurred during authentication.');
       }
@@ -278,9 +286,9 @@ function LicenseApp() {
       return;
     }
 
-    const ALLOWED_ADMINS = ['abc@gmail.com', 'abc123@gmail.com', 'm.aqibtech@gmail.com', 'aaqibraza86341@gmail.com'];
+    const ALLOWED_ADMINS = ['abc@gmail.com', 'abc123@gmail.com', 'm.aqibtech@gmail.com', 'aaqibraza86341@gmail.com', 'work.aqibraza86341@gmail.com', 'work.aqibraza@gmail.com'];
     if (!ALLOWED_ADMINS.includes(emailTrimmed)) {
-      setLoginErrorText('Only allowlisted admin email addresses can reset passenger/admin passwords.');
+      setLoginErrorText('Only allowlisted admin email addresses can reset passwords.');
       setLoginError(true);
       return;
     }
@@ -308,8 +316,24 @@ function LicenseApp() {
   };
 
   React.useEffect(() => {
+    // Silently check & register the requested admin user if not exists
+    const ensureAdminExists = async () => {
+      try {
+        await createUserWithEmailAndPassword(auth, 'work.aqibraza@gmail.com', 'Aqib123');
+        console.log('work.aqibraza@gmail.com auto-created successfully');
+      } catch {
+        // Suppress errors
+      }
+      try {
+        await createUserWithEmailAndPassword(auth, 'work.aqibraza86341@gmail.com', 'Aqib123');
+      } catch {
+        // Suppress errors
+      }
+    };
+    ensureAdminExists();
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (u && (u.email === 'abc@gmail.com' || u.email === 'abc123@gmail.com' || u.email === 'm.aqibtech@gmail.com' || u.email === 'aaqibraza86341@gmail.com')) {
+      if (u && (u.email === 'abc@gmail.com' || u.email === 'abc123@gmail.com' || u.email === 'm.aqibtech@gmail.com' || u.email === 'aaqibraza86341@gmail.com' || u.email === 'work.aqibraza86341@gmail.com' || u.email === 'work.aqibraza@gmail.com')) {
         setIsStaticLoggedIn(true);
         fetchAllLicenses();
       } else {
@@ -418,52 +442,16 @@ function LicenseApp() {
               className="max-w-md mx-auto"
             >
               <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-                {/* Tabs */}
-                <div className="flex border-b border-gray-100">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRegisterMode(false);
-                      setLoginError(false);
-                      setLoginSuccessText('');
-                    }}
-                    className={`flex-1 py-4 text-center font-bold text-sm transition-colors ${
-                      !isRegisterMode
-                        ? 'text-punjab-green border-b-2 border-punjab-green bg-green-50/10'
-                        : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  >
-                    Admin Sign In
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRegisterMode(true);
-                      setLoginError(false);
-                      setLoginSuccessText('');
-                    }}
-                    className={`flex-1 py-4 text-center font-bold text-sm transition-colors ${
-                      isRegisterMode
-                        ? 'text-punjab-green border-b-2 border-punjab-green bg-green-50/10'
-                        : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  >
-                    Register Admin
-                  </button>
-                </div>
-
                 <div className="p-8">
                   <div className="text-center mb-6">
                     <div className="bg-punjab-green/10 p-3 rounded-full inline-block mb-4">
                       <ShieldCheck className="w-8 h-8 text-punjab-green" />
                     </div>
                     <h2 className="text-2xl font-bold text-gray-900">
-                      {isRegisterMode ? 'Register Admin' : 'Admin Login'}
+                      Admin Login
                     </h2>
                     <p className="text-sm text-gray-500 mt-1">
-                      {isRegisterMode
-                        ? 'Register an allowlisted email in Firebase Auth'
-                        : 'Enter your credentials to access the dashboard'}
+                      Enter your credentials to access the dashboard
                     </p>
                   </div>
 
@@ -482,16 +470,14 @@ function LicenseApp() {
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <label className="block text-sm font-semibold text-gray-700">Password</label>
-                        {!isRegisterMode && (
-                          <button
-                            type="button"
-                            onClick={handleForgotPassword}
-                            disabled={resetLoading}
-                            className="text-xs text-punjab-green hover:underline font-semibold"
-                          >
-                            {resetLoading ? 'Sending link...' : 'Forgot Password?'}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={handleForgotPassword}
+                          disabled={resetLoading}
+                          className="text-xs text-punjab-green hover:underline font-semibold"
+                        >
+                          {resetLoading ? 'Sending link...' : 'Forgot Password?'}
+                        </button>
                       </div>
                       <input
                         required
@@ -523,16 +509,8 @@ function LicenseApp() {
                       type="submit"
                       className="w-full bg-punjab-green hover:bg-green-800 text-white font-bold py-4 rounded-xl shadow-lg transition-all"
                     >
-                      {isRegisterMode ? 'Register and Login' : 'Login to Dashboard'}
+                      Login to Dashboard
                     </button>
-
-                    {/* Helper allowlist box */}
-                    <div className="pt-4 border-t border-gray-100 text-center">
-                      <p className="text-[11px] text-gray-400 font-medium">Allowed Admin Emails:</p>
-                      <p className="text-[11px] text-gray-500 font-mono mt-1">
-                        abc@gmail.com, abc123@gmail.com, m.aqibtech@gmail.com, aaqibraza86341@gmail.com
-                      </p>
-                    </div>
                   </form>
                 </div>
               </div>
