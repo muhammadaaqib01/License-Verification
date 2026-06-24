@@ -405,6 +405,24 @@ function LicenseApp() {
     window.print();
   };
 
+  const handleDownload = () => {
+    if (!result || result === 'not_found') return;
+    try {
+      const link = document.createElement('a');
+      link.href = result.fileUrl;
+      const isPdf = result.fileType === 'pdf';
+      const ext = isPdf ? 'pdf' : 'png';
+      link.download = `license_${result.licenseNumber || 'document'}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Download failed:', error);
+      const win = window.open(result.fileUrl, '_blank');
+      if (win) win.focus();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 print:bg-white">
       {/* Header */}
@@ -898,21 +916,12 @@ function LicenseApp() {
                 <p>Verified on: {new Date().toLocaleString()}</p>
                 <div className="flex space-x-4">
                   <button 
-                    onClick={handlePrint}
-                    className="flex items-center space-x-1 hover:text-punjab-green font-semibold transition-colors"
-                  >
-                    <Printer className="w-4 h-4" />
-                    <span>Print Certificate</span>
-                  </button>
-                  <a 
-                    href={result.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    onClick={handleDownload}
                     className="flex items-center space-x-1 hover:text-punjab-green font-semibold transition-colors"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Download Original</span>
-                  </a>
+                    <span>Download License</span>
+                  </button>
                 </div>
               </div>
             </motion.div>
