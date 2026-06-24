@@ -3,7 +3,7 @@ import { useState, useRef } from 'react';
 import { Search, ShieldCheck, AlertCircle, User, CreditCard, Loader2, CheckCircle2, XCircle, Download, Printer, FileText, Image as ImageIcon, RefreshCw, Eye, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, orderBy, deleteDoc, doc } from 'firebase/firestore';
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
 import { db, auth } from './firebase';
 
 // ===============================================================
@@ -142,6 +142,10 @@ function LicenseApp() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState(false);
+  const [loginErrorText, setLoginErrorText] = useState('Invalid email or password');
+  const [loginSuccessText, setLoginSuccessText] = useState('');
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   // Admin Form State
   const [adminForm, setAdminForm] = useState<Omit<License, 'uploadedAt'>>({
@@ -160,7 +164,8 @@ function LicenseApp() {
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
   const fetchAllLicenses = async () => {
-    if (!isStaticLoggedIn) return;
+    const user = auth.currentUser;
+    if (!user || !(user.email === 'abc@gmail.com' || user.email === 'abc123@gmail.com' || user.email === 'm.aqibtech@gmail.com' || user.email === 'aaqibraza86341@gmail.com')) return;
     setFetchingRecords(true);
     const path = 'licenses';
     try {
@@ -218,13 +223,78 @@ function LicenseApp() {
 
   const handleStaticLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError(false);
+    setLoginSuccessText('');
+    setLoginErrorText('');
+
+    const emailTrimmed = loginEmail.trim().toLowerCase();
+    const ALLOWED_ADMINS = ['abc@gmail.com', 'abc123@gmail.com', 'm.aqibtech@gmail.com', 'aaqibraza86341@gmail.com'];
+    
+    if (!ALLOWED_ADMINS.includes(emailTrimmed)) {
+      setLoginErrorText('Only allowlisted admin email addresses are allowed.');
+      setLoginError(true);
+      return;
+    }
+
+    if (loginPassword.length < 6) {
+      setLoginErrorText('Password must be at least 6 characters.');
+      setLoginError(true);
+      return;
+    }
+
     try {
-      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      if (isRegisterMode) {
+        await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
+        setLoginSuccessText('Admin account created successfully!');
+      } else {
+        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      }
       setIsStaticLoggedIn(true);
       setLoginError(false);
-    } catch (error) {
-      console.error('Login Error:', error);
+    } catch (error: any) {
+      console.error('Auth Error:', error);
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        setLoginErrorText('Invalid credentials. If you deleted your user from console, switch to the Register tab above to recreate it.');
+      } else if (error.code === 'auth/email-already-in-use') {
+        setLoginErrorText('Email is already registered. Please login instead.');
+      } else if (error.code === 'auth/weak-password') {
+        setLoginErrorText('Password must be at least 6 characters.');
+      } else {
+        setLoginErrorText(error.message || 'An error occurred during authentication.');
+      }
       setLoginError(true);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setLoginError(false);
+    setLoginSuccessText('');
+    setLoginErrorText('');
+
+    const emailTrimmed = loginEmail.trim().toLowerCase();
+    if (!emailTrimmed) {
+      setLoginErrorText('Please enter your email address to reset your password.');
+      setLoginError(true);
+      return;
+    }
+
+    const ALLOWED_ADMINS = ['abc@gmail.com', 'abc123@gmail.com', 'm.aqibtech@gmail.com', 'aaqibraza86341@gmail.com'];
+    if (!ALLOWED_ADMINS.includes(emailTrimmed)) {
+      setLoginErrorText('Only allowlisted admin email addresses can reset passenger/admin passwords.');
+      setLoginError(true);
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, emailTrimmed);
+      setLoginSuccessText('Password reset email has been sent! Check your inbox.');
+    } catch (error: any) {
+      console.error('Reset Error:', error);
+      setLoginErrorText(error.message || 'Failed to send password reset email.');
+      setLoginError(true);
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -234,11 +304,12 @@ function LicenseApp() {
     setView('public');
     setLoginEmail('');
     setLoginPassword('');
+    setIsRegisterMode(false);
   };
 
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (u && (u.email === 'abc@gmail.com' || u.email === 'abc123@gmail.com' || u.email === 'm.aqibtech@gmail.com')) {
+      if (u && (u.email === 'abc@gmail.com' || u.email === 'abc123@gmail.com' || u.email === 'm.aqibtech@gmail.com' || u.email === 'aaqibraza86341@gmail.com')) {
         setIsStaticLoggedIn(true);
         fetchAllLicenses();
       } else {
@@ -347,16 +418,56 @@ function LicenseApp() {
               className="max-w-md mx-auto"
             >
               <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+                {/* Tabs */}
+                <div className="flex border-b border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRegisterMode(false);
+                      setLoginError(false);
+                      setLoginSuccessText('');
+                    }}
+                    className={`flex-1 py-4 text-center font-bold text-sm transition-colors ${
+                      !isRegisterMode
+                        ? 'text-punjab-green border-b-2 border-punjab-green bg-green-50/10'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    Admin Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRegisterMode(true);
+                      setLoginError(false);
+                      setLoginSuccessText('');
+                    }}
+                    className={`flex-1 py-4 text-center font-bold text-sm transition-colors ${
+                      isRegisterMode
+                        ? 'text-punjab-green border-b-2 border-punjab-green bg-green-50/10'
+                        : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    Register Admin
+                  </button>
+                </div>
+
                 <div className="p-8">
-                  <div className="text-center mb-8">
+                  <div className="text-center mb-6">
                     <div className="bg-punjab-green/10 p-3 rounded-full inline-block mb-4">
                       <ShieldCheck className="w-8 h-8 text-punjab-green" />
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-900">Admin Login</h2>
-                    <p className="text-sm text-gray-500">Enter your credentials to access the dashboard</p>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      {isRegisterMode ? 'Register Admin' : 'Admin Login'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {isRegisterMode
+                        ? 'Register an allowlisted email in Firebase Auth'
+                        : 'Enter your credentials to access the dashboard'}
+                    </p>
                   </div>
 
-                  <form onSubmit={handleStaticLogin} className="space-y-6">
+                  <form onSubmit={handleStaticLogin} className="space-y-5">
                     <div className="space-y-2">
                       <label className="block text-sm font-semibold text-gray-700">Email Address</label>
                       <input
@@ -369,7 +480,19 @@ function LicenseApp() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-gray-700">Password</label>
+                      <div className="flex justify-between items-center">
+                        <label className="block text-sm font-semibold text-gray-700">Password</label>
+                        {!isRegisterMode && (
+                          <button
+                            type="button"
+                            onClick={handleForgotPassword}
+                            disabled={resetLoading}
+                            className="text-xs text-punjab-green hover:underline font-semibold"
+                          >
+                            {resetLoading ? 'Sending link...' : 'Forgot Password?'}
+                          </button>
+                        )}
+                      </div>
                       <input
                         required
                         type="password"
@@ -381,15 +504,35 @@ function LicenseApp() {
                     </div>
 
                     {loginError && (
-                      <p className="text-xs text-red-600 font-bold text-center">Invalid email or password</p>
+                      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-xs font-medium space-y-1">
+                        <div className="font-bold flex items-center space-x-1">
+                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                          <span>Authentication Failed</span>
+                        </div>
+                        <p>{loginErrorText}</p>
+                      </div>
+                    )}
+
+                    {loginSuccessText && (
+                      <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-xs font-medium">
+                        <p>{loginSuccessText}</p>
+                      </div>
                     )}
 
                     <button
                       type="submit"
                       className="w-full bg-punjab-green hover:bg-green-800 text-white font-bold py-4 rounded-xl shadow-lg transition-all"
                     >
-                      Login to Dashboard
+                      {isRegisterMode ? 'Register and Login' : 'Login to Dashboard'}
                     </button>
+
+                    {/* Helper allowlist box */}
+                    <div className="pt-4 border-t border-gray-100 text-center">
+                      <p className="text-[11px] text-gray-400 font-medium">Allowed Admin Emails:</p>
+                      <p className="text-[11px] text-gray-500 font-mono mt-1">
+                        abc@gmail.com, abc123@gmail.com, m.aqibtech@gmail.com, aaqibraza86341@gmail.com
+                      </p>
+                    </div>
                   </form>
                 </div>
               </div>
@@ -739,9 +882,16 @@ function LicenseApp() {
                       {result.fileType === 'pdf' ? <FileText className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}
                       <span>Official License Document:</span>
                     </p>
-                    {result.uploadedAt && (
-                      <p className="text-xs text-gray-400">Uploaded on: {new Date(result.uploadedAt).toLocaleDateString()}</p>
-                    )}
+                    {result.uploadedAt && (() => {
+                      try {
+                        const date = result.uploadedAt.toDate ? result.uploadedAt.toDate() : new Date(result.uploadedAt);
+                        return isNaN(date.getTime()) ? null : (
+                          <p className="text-xs text-gray-400">Uploaded on: {date.toLocaleDateString()}</p>
+                        );
+                      } catch {
+                        return null;
+                      }
+                    })()}
                   </div>
 
                   <div className="border-4 border-gray-100 rounded-2xl overflow-hidden shadow-inner bg-gray-50 min-h-[300px] flex items-center justify-center">
